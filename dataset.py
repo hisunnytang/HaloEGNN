@@ -1,6 +1,7 @@
 from torch.utils.data import Dataset
 import numpy as np
 import h5py
+import torch
 
 class HaloDataset(Dataset):
   scalar_field_cols = ['Group_M_Crit200', 'Group_M_Mean200', 'Group_R_Crit200', 'Group_R_Mean200',  'SubhaloVMax', 'SubhaloVelDisp']
@@ -31,13 +32,13 @@ class HaloDataset(Dataset):
        1.41876206e-01, 1.25759333e-01, 1.09869942e-01, 9.94018018e-02,
        8.38844329e-02, 7.36613870e-02, 5.85073233e-02, 4.85236309e-02,
        3.37243713e-02, 2.39744280e-02, 9.52166691e-03, 2.22044605e-16])
-  
-  def __init__(self, 
-               filenames, 
+
+  def __init__(self,
+               filenames,
                input_redshift=2.0,
                target_redshift=0.0,
-               scalar_features = ["SubhaloMassType",  
-                                  "SubhaloVMax", 
+               scalar_features = ["SubhaloMassType",
+                                  "SubhaloVMax",
                                   "SubhaloVelDisp"],
                coor_features   = ['SubhaloPos'],
                vector_features = ['SubhaloVel',
@@ -74,15 +75,15 @@ class HaloDataset(Dataset):
       scalar_features = []
       for scalar_cols in self.scalar_features:
         if scalar_cols == 'SubhaloMassType':
-          feat = f[scalar_cols][halo_featz_index,1]        
+          feat = f[scalar_cols][halo_featz_index,1]
         else:
           feat = f[scalar_cols][halo_featz_index]
         scalar_features.append(feat)
-      
+
       pos_features = []
       for pos in self.coor_features:
         pos_features.append(f[pos][halo_featz_index])
-      
+
       vector_features = []
       for vel in self.vector_features:
         vector_features.append(f[vel][halo_featz_index])
