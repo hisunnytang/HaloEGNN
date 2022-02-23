@@ -53,6 +53,4 @@ def get_model(
     flow_transforms.append(ffjord)
     flow = Flow(transformations=flow_transforms).to(device)
     flow.set_trace(trace)
-
-    # this is something we can replace later with another normalizing flow
-    nodes_dist = DistributionNodes()
+    return prior, flow
