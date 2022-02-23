@@ -29,7 +29,7 @@ _redshifts = np.array([2.00464916e+01, 1.49891729e+01, 1.19802132e+01, 1.0975643
                        8.38844329e-02, 7.36613870e-02, 5.85073233e-02, 4.85236309e-02,
                        3.37243713e-02, 2.39744280e-02, 9.52166691e-03, 2.22044605e-16])
 
-colname = np.array(['SubhaloBHMass', 'SubhaloBHMdot', 'SubhaloGasMetallicity',
+data_columns = np.array(['SubhaloBHMass', 'SubhaloBHMdot', 'SubhaloGasMetallicity',
                            'SubhaloGasMetallicitySfr', 'SubhaloHalfmassRad',
                            'SubhaloMassType_0', 'SubhaloMassType_1', 'SubhaloMassType_2',
                            'SubhaloMassType_3', 'SubhaloMassType_4', 'SubhaloMassType_5',
