@@ -101,8 +101,8 @@ class ProgenitorDataset(torch.utils.data.Dataset):
                                                  self.final_slice,
                                                  max_progenitors=self.max_progenitors,
                                                  position_columns=self.position,
-                                                 feature_column=self.feature,
-                                                 condition_column=self.condition,
+                                                 feature_columns=self.feature,
+                                                 condition_columns=self.condition,
                                                  )
       torch_data = [torch.from_numpy(i) for i in input_data]
       cond_data  = [torch.from_numpy(i) for i in cond_data]
