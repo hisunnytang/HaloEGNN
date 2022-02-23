@@ -100,7 +100,7 @@ class ProgenitorDataset(torch.utils.data.Dataset):
                                                  self.initial_slice,
                                                  self.final_slice,
                                                  max_progenitors=self.max_progenitors,
-                                                 position_columns=self.position
+                                                 position_columns=self.position,
                                                  feature_column=self.feature,
                                                  condition_column=self.condition,
                                                  )
