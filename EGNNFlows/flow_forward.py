@@ -25,7 +25,8 @@ def flow_forward(flow,
     # h = log_normalize_with_mask(h, node_mask)
 
     h = (h+1e-8).log()* node_mask
-    context = log_norm_target(context)
+    # dont normalize here
+    #context = log_norm_target(context)
 
     # center the position coordinate
     xx = remove_mean_with_mask(x/x_norm, node_mask)
@@ -33,7 +34,7 @@ def flow_forward(flow,
 
     bs, n_nodes, n_dims = xx.size()
     # inflate context (condition) in to the shape of [batch, max_nodes, n_context]
-    context_ = context.unsqueeze(-1).repeat(1, n_nodes, 1)* node_mask
+    context_ = context.unsqueeze(1).repeat(1, n_nodes, 1)* node_mask
     assert_correctly_masked(context_, node_mask)
 
     xh = torch.cat([xx, h], dim=2)
@@ -53,6 +54,7 @@ def flow_forward(flow,
 
     N = node_mask.squeeze(2).sum(1).long()
 
+    log_qh_x = 0
     log_pz = prior(z_x, z_h, node_mask)
     log_px = (log_pz + delta_logp - log_qh_x).mean()  # Average over batch.
     reg_term = reg_term.mean()  # Average over batch.
