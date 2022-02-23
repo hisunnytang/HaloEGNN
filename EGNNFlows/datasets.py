@@ -29,9 +29,27 @@ _redshifts = np.array([2.00464916e+01, 1.49891729e+01, 1.19802132e+01, 1.0975643
                        8.38844329e-02, 7.36613870e-02, 5.85073233e-02, 4.85236309e-02,
                        3.37243713e-02, 2.39744280e-02, 9.52166691e-03, 2.22044605e-16])
 
-def extract_column_data( data: np.ndarray, column_names: List, max_progenitors: int, redshift_slice: int )-> np.ndarray:
+colname = np.array(['SubhaloBHMass', 'SubhaloBHMdot', 'SubhaloGasMetallicity',
+                           'SubhaloGasMetallicitySfr', 'SubhaloHalfmassRad',
+                           'SubhaloMassType_0', 'SubhaloMassType_1', 'SubhaloMassType_2',
+                           'SubhaloMassType_3', 'SubhaloMassType_4', 'SubhaloMassType_5',
+                           'SubhaloPos_0', 'SubhaloPos_1', 'SubhaloPos_2', 'SubhaloSFR',
+                           'SubhaloSpin_0', 'SubhaloSpin_1', 'SubhaloSpin_2',
+                           'SubhaloStarMetallicity', 'SubhaloStellarPhotometrics_0',
+                           'SubhaloStellarPhotometrics_1', 'SubhaloStellarPhotometrics_2',
+                           'SubhaloStellarPhotometrics_3', 'SubhaloStellarPhotometrics_4',
+                           'SubhaloStellarPhotometrics_5', 'SubhaloStellarPhotometrics_6',
+                           'SubhaloStellarPhotometrics_7', 'SubhaloVMax', 'SubhaloVel_0',
+                           'SubhaloVel_1', 'SubhaloVel_2', 'SubhaloVelDisp',
+                           'RadialSubhaloPos', 'RadialSubhaloVel'], dtype='<U28')
+
+def extract_column_data( data: np.ndarray,
+                        column_names: List,
+                        max_progenitors: int,
+                        redshift_slice: int,
+                        data_columns = data_columns)-> np.ndarray:
     """extract the relavant column only over a particular redshift slice"""""
-    col_indx = [np.where(colname == c)[0][0] for c in column_names]
+    col_indx = [np.where(data_columns == c)[0][0] for c in column_names]
 
     datas = []
     for i in col_indx:
@@ -57,14 +75,15 @@ def prepare_input_data(data,
                        max_progenitors=20,
                        position_columns = ["SubhaloPos_0", "SubhaloPos_1", "SubhaloPos_2"],
                        feature_columns  = ["SubhaloMassType_1"],
-                       condition_columns = ['SubhaloMassType_1']
+                       condition_columns = ['SubhaloMassType_1'],
+                       data_columns=data_columns,
                        ):
 
-    position_data = extract_column_data(data, position_columns, max_progenitors, initial_slice )
-    mass_data     = extract_column_data(data, feature_columns, max_progenitors, initial_slice )
+    position_data = extract_column_data(data, position_columns, max_progenitors, initial_slice, data_columns )
+    mass_data     = extract_column_data(data, feature_columns, max_progenitors, initial_slice , data_columns)
 
     #_position_data = extract_column_data(data, position_columns, max_progenitors, final_slice )
-    _mass_data     = extract_column_data(data, condition_columns, max_progenitors, final_slice )
+    _mass_data     = extract_column_data(data, condition_columns, max_progenitors, final_slice, data_columns )
 
     # get edge data too!
     node_mask = (mass_data >0).astype(int)
@@ -80,7 +99,8 @@ class ProgenitorDataset(torch.utils.data.Dataset):
                final_slice=99,
                position_columns = ["SubhaloPos_0", "SubhaloPos_1", "SubhaloPos_2"],
                feature_columns  = ["SubhaloMassType_1"],
-               condition_columns = ['SubhaloMassType_1']
+               condition_columns = ['SubhaloMassType_1'],
+               data_columns = data_columns,
                ):
       super().__init__()
       self.filenames = filenames
@@ -90,6 +110,7 @@ class ProgenitorDataset(torch.utils.data.Dataset):
       self.condition = condition_columns
       self.feature   = feature_columns
       self.position = position_columns
+      self.data_columns = data_columns
 
   def __len__(self):
       return len(self.filenames)
@@ -103,6 +124,7 @@ class ProgenitorDataset(torch.utils.data.Dataset):
                                                  position_columns=self.position,
                                                  feature_columns=self.feature,
                                                  condition_columns=self.condition,
+                                                 data_columns=self.data_columns
                                                  )
       torch_data = [torch.from_numpy(i) for i in input_data]
       cond_data  = [torch.from_numpy(i) for i in cond_data]
