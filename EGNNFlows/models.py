@@ -20,7 +20,7 @@ def get_model(
     attention=True,
     tanh=True,
     mode = "egnn_dynamics",
-    ode_regularization = 1e-3
+    ode_regularization = 1e-3,
     trace = 'hutch',
     condition_time = True
 ):
