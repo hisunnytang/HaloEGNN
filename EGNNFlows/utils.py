@@ -1,5 +1,5 @@
 import torch
-from flows.utils import assert_mean_zero_with_mask, remove_mean_with_mask,\
+from flows.utils import assert_mean_zero_with_mask, remove_mean_with_mask
 
 def subtract_the_boundary(position, node_mask, box_size=205000):
     xx = remove_mean_with_mask(position, node_mask)
