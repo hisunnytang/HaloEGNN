@@ -76,7 +76,7 @@ class ProgenitorDataset(torch.utils.data.Dataset):
   def __init__(self,
                filenames,
                max_progenitors=20,
-               first_slice=30,
+               initial_slice=30,
                final_slice=99,
                position_columns = ["SubhaloPos_0", "SubhaloPos_1", "SubhaloPos_2"],
                feature_columns  = ["SubhaloMassType_1"],
