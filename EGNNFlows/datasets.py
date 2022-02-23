@@ -54,7 +54,7 @@ def extract_column_data( data: np.ndarray,
     datas = []
     for i in col_indx:
         datas.append(data[redshift_slice, i*max_progenitors: (i+1)*max_progenitors])
-        return np.array(datas)
+    return np.array(datas)
 
 def find_closest_redshift_slice(z):
     return np.argmin(np.abs(_redshifts-z))
