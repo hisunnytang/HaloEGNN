@@ -2,6 +2,8 @@ import torch
 from flows.utils import assert_mean_zero_with_mask, remove_mean_with_mask,\
         assert_correctly_masked
 from utils import subtract_the_boundary
+from tqdm import tqdm
+import time
 
 def flow_forward(flow,
                  prior,
@@ -61,27 +63,41 @@ def flow_forward(flow,
     nll = -log_px
 
     mean_abs_z = torch.mean(torch.abs(z)).item()
-    loss = nll + 0.01 * reg_term
+    loss = nll + ode_regularization * reg_term
 
     return nll, loss, z_x, z_h
 
-def train_step(flow, prior, optim, dl_train):
-    total_loss = 0.0
-    for input_graph, input_cond in tqdm(dl_train):
+def train_step(flow, prior, optim, dl_train, condition_normalizer, device='cuda', ode_regularization=1e-2):
+    pbar = tqdm(dl_train)
+    count = 0
+    total_loss = 0
+    for input_graph, input_cond in pbar:
         start = time.time()
         optim.zero_grad()
-        nll, loss, _, _ = flow_forward(flow, prior, input_graph, input_cond, device=device, ode_regularizaton=ode_regularization)
+        input_cond = [ torch.from_numpy(condition_normalizer.transform(input_cond[0])) ]
+        nll, loss, _, _ = flow_forward.flow_forward(flow, prior, input_graph, input_cond, device=device, ode_regularization=ode_regularization)
         loss.backward()
         optim.step()
         total_loss += loss.item()
+        count += 1
+        pbar.set_postfix({"total_loss": total_loss/count} )
+        pbar.refresh()
     return total_loss / len(dl_train)
 
+
 @torch.no_grad()
-def val_step(flow, prior, dl_val):
-    total_loss = 0.0
-    for input_graph, input_cond in tqdm(dl_val):
+def val_step(flow, prior, dl_val, condition_normalizer, device='cuda', ode_regularization=1e-2):
+    pbar = tqdm(dl_val)
+    count = 0
+    total_loss = 0
+    for input_graph, input_cond in pbar:
         start = time.time()
-        nll, loss, _, _ = flow_forward(flow, prior, input_graph, input_cond, device=device, ode_regularizaton=ode_regularization)
+        input_cond = [ torch.from_numpy(condition_normalizer.transform(input_cond[0])) ]
+        nll, loss, _, _ = flow_forward.flow_forward(flow, prior, input_graph, input_cond, device='cuda', ode_regularization=0.01)
         total_loss += loss.item()
+        count += 1
+        pbar.set_postfix({"total_loss": total_loss/count} )
+        pbar.refresh()
     return total_loss / len(dl_val)
+
 
