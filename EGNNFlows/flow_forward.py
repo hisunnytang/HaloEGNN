@@ -75,7 +75,7 @@ def train_step(flow, prior, optim, dl_train, condition_normalizer, device='cuda'
         start = time.time()
         optim.zero_grad()
         input_cond = [ torch.from_numpy(condition_normalizer.transform(input_cond[0])) ]
-        nll, loss, _, _ = flow_forward.flow_forward(flow, prior, input_graph, input_cond, device=device, ode_regularization=ode_regularization)
+        nll, loss, _, _ = flow_forward(flow, prior, input_graph, input_cond, device=device, ode_regularization=ode_regularization)
         loss.backward()
         optim.step()
         total_loss += loss.item()
@@ -93,7 +93,7 @@ def val_step(flow, prior, dl_val, condition_normalizer, device='cuda', ode_regul
     for input_graph, input_cond in pbar:
         start = time.time()
         input_cond = [ torch.from_numpy(condition_normalizer.transform(input_cond[0])) ]
-        nll, loss, _, _ = flow_forward.flow_forward(flow, prior, input_graph, input_cond, device='cuda', ode_regularization=0.01)
+        nll, loss, _, _ = flow_forward(flow, prior, input_graph, input_cond, device='cuda', ode_regularization=0.01)
         total_loss += loss.item()
         count += 1
         pbar.set_postfix({"total_loss": total_loss/count} )
