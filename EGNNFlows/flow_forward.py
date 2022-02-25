@@ -1,7 +1,7 @@
 import torch
-from flows.utils import assert_mean_zero_with_mask, remove_mean_with_mask,\
+from .flows.utils import assert_mean_zero_with_mask, remove_mean_with_mask,\
         assert_correctly_masked
-from utils import subtract_the_boundary
+from .utils import subtract_the_boundary
 from tqdm import tqdm
 import time
 
