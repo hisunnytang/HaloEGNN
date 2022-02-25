@@ -1,12 +1,12 @@
 import torch
 
-from egnn.models import EGNN_dynamics_QM9
-from flows.ffjord import FFJORD
-from flows.dequantize import UniformDequantizer, \
+from .egnn.models import EGNN_dynamics_QM9
+from .flows.ffjord import FFJORD
+from .flows.dequantize import UniformDequantizer, \
     VariationalDequantizer, ArgmaxAndVariationalDequantizer
-from flows import Flow
-from flows.actnorm import ActNormPositionAndFeatures
-from flows.distributions import PositionFeaturePrior
+from .flows import Flow
+from .flows.actnorm import ActNormPositionAndFeatures
+from .flows.distributions import PositionFeaturePrior
 
 
 def get_model(

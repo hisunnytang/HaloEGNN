@@ -1,11 +1,11 @@
 import torch
 from torch import nn
-from flows.utils import \
+from ..flows.utils import \
     standard_gaussian_log_likelihood_with_mask, \
     sample_gaussian_with_mask, sum_except_batch, \
     assert_correctly_masked
 import torch.nn.functional as F
-from egnn.models import EGNN
+from ..egnn.models import EGNN
 
 
 class EGNN_output_h(nn.Module):

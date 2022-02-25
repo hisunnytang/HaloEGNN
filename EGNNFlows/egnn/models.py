@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from egnn.gcl import E_GCL, GCL
-from flows.utils import remove_mean, remove_mean_with_mask
+from ..egnn.gcl import E_GCL, GCL
+from ..flows.utils import remove_mean, remove_mean_with_mask
 
 
 class EGNN_dynamics(nn.Module):
