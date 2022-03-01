@@ -1,0 +1,8 @@
+h5py==3.6.0
+matplotlib==3.4.0
+multiprocess==0.70.12.2
+numpy==1.22.2
+requests==2.27.1
+torch==1.10.0a0+git36449ea
+torchdiffeq==0.2.2
+tqdm==4.62.3
