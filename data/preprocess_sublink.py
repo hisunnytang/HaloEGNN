@@ -489,29 +489,31 @@ def write_prog_by_filename_with_mergez(
 
         print(outfile)
         return outfile
-    except:
+    except Exception as e:
         print(fn, "failed")
+        print(e)
         return fn
 
 
 if __name__ == "__main__":
-    preprocessed_loc = "/scratch/TNG300_preprocessed_data"
+    preprocessed_loc = "/scratch/dg97/kt9438/TNG300_preprocessed_data"
     existing_npy = glob.glob(f"{preprocessed_loc}/*.npy")
     existing_hid = [f.split("/")[-1].split(".")[0][13:] for f in existing_npy]
 
-    sublink_loc = "/scratch/QueryTNGData/"
+    sublink_loc = "/scratch/dg97/kt9438/QueryTNGData/"
     filelist = glob.glob(f"{sublink_loc}/*.hdf5")
     all_hid = [f.split("/")[-1].split(".")[0][8:] for f in filelist]
 
     remaining_hid = sorted(list(set(all_hid) - set(existing_hid)))
     remaining_filenames = [
-        f"{preprocessed_loc}/sublink_{h}.hdf5" for h in remaining_hid
+        f"{sublink_loc}/sublink_{h}.hdf5" for h in remaining_hid
     ]
 
     # identify the location of the slices
     initial_slice = find_closest_redshift_slice(2.0)
     final_slice = find_closest_redshift_slice(0.0)
-
+    print( len(remaining_filenames))
+    
     # Pool the data preprocessing
     pool = Pool(4)
     pool.map(
