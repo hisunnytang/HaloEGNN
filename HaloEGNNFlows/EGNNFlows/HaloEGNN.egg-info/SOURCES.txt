@@ -1,0 +1,5 @@
+setup.py
+HaloEGNN.egg-info/PKG-INFO
+HaloEGNN.egg-info/SOURCES.txt
+HaloEGNN.egg-info/dependency_links.txt
+HaloEGNN.egg-info/top_level.txt
