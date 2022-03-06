@@ -131,6 +131,7 @@ def obtain_conditional_feature_df(
     max_progenitors=20,
     max_samples=1000,
     distance_norm=300,
+    conditional_df=None,
     **query_bounds):
   # return 4 dataframes
   # return:
@@ -148,16 +149,24 @@ def obtain_conditional_feature_df(
     condition_columns= condition_columns)
   dl = torch.utils.data.DataLoader(ds,batch_size=64, num_workers=2)
   
-  # iterate it once to obtain the full, sorted "conditional" values
-  sample_condition, condition_normalizer = obtain_condition_transformer(
-    dl, 
-    max_sample=max_samples
-  )
+  # use precalculated condtional dataframe
+  # else recalculated it, BUT the dataframe would be log-normalized
+  if conditional_df is None:
+    # iterate it once to obtain the full, sorted "conditional" values
+    sample_condition, condition_normalizer = obtain_condition_transformer(
+      dl, 
+      max_sample=max_samples
+    )
 
-  df_full_cond = pd.DataFrame(
-    sample_condition.numpy(), 
-    columns= condition_columns
-  )
+    df_full_cond = pd.DataFrame(
+      sample_condition.numpy(), 
+      columns= condition_columns
+    )
+  else:
+    df_full_cond = conditional_df
+
+    # log the condition dataframe
+    df_full_cond =  np.log10(df_full_cond+1e-6)
 
   # let say we have the full "condition dataframe" now
   df_sub_cond = query_dataframe(df_full_cond, **query_bounds)
