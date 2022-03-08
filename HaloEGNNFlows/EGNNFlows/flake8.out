@@ -1,4 +1,0 @@
-train.py:10:1: F831 duplicate argument 'final_slice' in function definition
-train.py:111:9: F821 undefined name 'filelist'
-train.py:146:13: F821 undefined name 'condition_normalizer'
-train.py:154:13: F821 undefined name 'condition_normalizer'
