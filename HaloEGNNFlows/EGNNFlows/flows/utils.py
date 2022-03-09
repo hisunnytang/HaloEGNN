@@ -33,8 +33,9 @@ def assert_mean_zero_with_mask(x, node_mask):
 
 
 def assert_correctly_masked(variable, node_mask):
+
     assert (variable * (1 - node_mask)).abs().max().item() < 1e-4, \
-        'Variables not masked properly.'
+        f'Variables not masked properly.\n node_mask: {node_mask}\n variable: {variable}\n {node_mask.shape},{variable.shape},\n {(variable * (1 - node_mask)).abs().max().item()},\n {torch.isnan(node_mask).sum(), torch.isnan(variable).sum(), variable[torch.where(torch.isnan(variable))[0][0]]}'
 
 
 def center_gravity_zero_gaussian_log_likelihood(x):

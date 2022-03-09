@@ -86,10 +86,10 @@ def prepare_input_data(data,
     _mass_data     = extract_column_data(data, condition_columns, max_progenitors, final_slice, data_columns )
 
     # get edge data too!
-    node_mask = (mass_data >0).astype(int)
+    node_mask = (mass_data[0:1,:] >0).astype(int)
     edge_mask = get_fully_connected_edgemask( (node_mask).sum(), max_progenitors  )
 
-    return [np.transpose(position_data), np.transpose(mass_data), np.transpose(node_mask), edge_mask], [_mass_data[:,0],]
+    return [np.transpose(position_data), np.transpose(mass_data), np.transpose(node_mask), edge_mask], [np.transpose(_mass_data[:,0]),]
 
 class ProgenitorDataset(torch.utils.data.Dataset):
   def __init__(self,

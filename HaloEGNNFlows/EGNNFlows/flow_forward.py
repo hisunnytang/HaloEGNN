@@ -67,37 +67,41 @@ def flow_forward(flow,
 
     return nll, loss, z_x, z_h
 
-def train_step(flow, prior, optim, dl_train, condition_normalizer, device='cuda', ode_regularization=1e-2):
+def train_step(flow, prior, optim, dl_train, condition_normalizer, device='cuda', ode_regularization=1e-2, transform_input=None):
     pbar = tqdm(dl_train)
     count = 0
     total_loss = 0
+    if transform_input is None:
+        transform_input = lambda x: x
     for input_graph, input_cond in pbar:
         start = time.time()
         optim.zero_grad()
         input_cond = [ torch.from_numpy(condition_normalizer.transform(input_cond[0])) ]
+        input_graph = transform_input(input_graph)
         nll, loss, _, _ = flow_forward(flow, prior, input_graph, input_cond, device=device, ode_regularization=ode_regularization)
         loss.backward()
         optim.step()
         total_loss += loss.item()
         count += 1
         pbar.set_postfix({"total_loss": total_loss/count} )
-        pbar.refresh()
     return total_loss / len(dl_train)
 
 
 @torch.no_grad()
-def val_step(flow, prior, dl_val, condition_normalizer, device='cuda', ode_regularization=1e-2):
+def val_step(flow, prior, dl_val, condition_normalizer, device='cuda', ode_regularization=1e-2, transform_input=None):
     pbar = tqdm(dl_val)
     count = 0
     total_loss = 0
+    if transform_input is None:
+        transform_input = lambda x: x
     for input_graph, input_cond in pbar:
         start = time.time()
         input_cond = [ torch.from_numpy(condition_normalizer.transform(input_cond[0])) ]
-        nll, loss, _, _ = flow_forward(flow, prior, input_graph, input_cond, device='cuda', ode_regularization=0.01)
+        input_graph = transform_input(input_graph)
+        nll, loss, _, _ = flow_forward(flow, prior, input_graph, input_cond, device=device, ode_regularization=ode_regularization)
         total_loss += loss.item()
         count += 1
         pbar.set_postfix({"total_loss": total_loss/count} )
-        pbar.refresh()
     return total_loss / len(dl_val)
 
 
