@@ -57,8 +57,9 @@ class ActNormPositionAndFeatures(torch.nn.Module):
             h = xh[:, self.n_dims:].clone()
 
         # TODO ENABLE INIT.
-        if not self.initialized:
-            self.initialize(x, h, node_mask)
+        #if not self.initialized:
+        #    self.initialize(x, h, node_mask)
+        #print(x.device, self.h_t, self.h_log_s)
 
         h_log_s = self.h_log_s.expand_as(h)
         h_t = self.h_t.expand_as(h)
