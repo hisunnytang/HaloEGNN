@@ -70,7 +70,7 @@ def flow_forward(flow,
 def train_step(flow, prior, optim, dl_train, condition_normalizer, device='cuda', ode_regularization=1e-2, transform_input=None):
     pbar = tqdm(dl_train)
     count = 0
-    total_loss = 0
+    total_loss = torch.zeros(1, device=device)
     if transform_input is None:
         transform_input = lambda x: x
     for input_graph, input_cond in pbar:
@@ -91,7 +91,7 @@ def train_step(flow, prior, optim, dl_train, condition_normalizer, device='cuda'
 def val_step(flow, prior, dl_val, condition_normalizer, device='cuda', ode_regularization=1e-2, transform_input=None):
     pbar = tqdm(dl_val)
     count = 0
-    total_loss = 0
+    total_loss = torch.zeros(1, device=device)
     if transform_input is None:
         transform_input = lambda x: x
     for input_graph, input_cond in pbar:
