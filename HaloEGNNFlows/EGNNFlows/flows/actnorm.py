@@ -28,7 +28,7 @@ class ActNormPositionAndFeatures(torch.nn.Module):
         self.register_buffer('initialized', torch.tensor(0))
 
     def initialize(self, x, h, node_mask):
-        print('initializing')
+        print(f'initializing actnorm layer on device = {x.device}')
         with torch.no_grad():
             h_mean = masked_mean(h, node_mask, dim=0, keepdim=True)
             h_stdev = masked_stdev(h, node_mask, dim=0, keepdim=True)
@@ -57,8 +57,8 @@ class ActNormPositionAndFeatures(torch.nn.Module):
             h = xh[:, self.n_dims:].clone()
 
         # TODO ENABLE INIT.
-        #if not self.initialized:
-        #    self.initialize(x, h, node_mask)
+        if not self.initialized:
+            self.initialize(x, h, node_mask)
         #print(x.device, self.h_t, self.h_log_s)
 
         h_log_s = self.h_log_s.expand_as(h)
