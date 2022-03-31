@@ -67,10 +67,16 @@ def flow_forward(flow,
 
     return nll, loss, z_x, z_h
 
+import torch.distributed as dist
 def train_step(flow, prior, optim, dl_train, condition_normalizer, device='cuda', ode_regularization=1e-2, transform_input=None):
-    pbar = tqdm(dl_train)
+    #rank = torch.distributed.get_rank()
+    #disable = False if rank == 0 else True
+    world_size = torch.cuda.device_count()
+    disable = False
+    pbar = tqdm(dl_train,disable=disable, mininterval=120)
     count = 0
     total_loss = torch.zeros(1, device=device)
+    total_nll  = torch.zeros(1, device=device)
     if transform_input is None:
         transform_input = lambda x: x
     for input_graph, input_cond in pbar:
@@ -79,19 +85,32 @@ def train_step(flow, prior, optim, dl_train, condition_normalizer, device='cuda'
         input_cond = [ torch.from_numpy(condition_normalizer.transform(input_cond[0])) ]
         input_graph = transform_input(input_graph)
         nll, loss, _, _ = flow_forward(flow, prior, input_graph, input_cond, device=device, ode_regularization=ode_regularization)
+
+        # force syncrhonization every step???
+        #if count == 0:
+        #world_size = torch.distributed.get_world_size()
+        if world_size > 1 and count == 0:
+            actnorm = flow.module.transformations[0]
+            dist.broadcast(actnorm.h_t.data, src=0, group=dist.new_group(list(range(world_size))))
+            dist.broadcast(actnorm.x_log_s.data, src=0, group=dist.new_group(list(range(world_size))))
+            dist.broadcast(actnorm.h_log_s.data, src=0, group=dist.new_group(list(range(world_size))))
+            dist.barrier()
+
         loss.backward()
         optim.step()
         total_loss += loss.item()
+        total_nll  += nll.item()
         count += 1
-        pbar.set_postfix({"total_loss": total_loss/count} )
+        pbar.set_postfix({"train_loss": total_loss.item()/count, "nll": total_nll.item()/count} )
     return total_loss / len(dl_train)
 
 
 @torch.no_grad()
 def val_step(flow, prior, dl_val, condition_normalizer, device='cuda', ode_regularization=1e-2, transform_input=None):
-    pbar = tqdm(dl_val)
+    pbar = tqdm(dl_val,mininterval=120)
     count = 0
     total_loss = torch.zeros(1, device=device)
+    total_nll  = torch.zeros(1, device=device)
     if transform_input is None:
         transform_input = lambda x: x
     for input_graph, input_cond in pbar:
@@ -100,8 +119,9 @@ def val_step(flow, prior, dl_val, condition_normalizer, device='cuda', ode_regul
         input_graph = transform_input(input_graph)
         nll, loss, _, _ = flow_forward(flow, prior, input_graph, input_cond, device=device, ode_regularization=ode_regularization)
         total_loss += loss.item()
+        total_nll  += nll.item()
         count += 1
-        pbar.set_postfix({"total_loss": total_loss/count} )
+        pbar.set_postfix({"val_loss": total_loss.item()/count, "nll": total_nll.item()/count} )
     return total_loss / len(dl_val)
 
 
