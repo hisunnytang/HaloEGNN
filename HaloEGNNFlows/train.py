@@ -1,7 +1,4 @@
-from HaloEGNNFlows.EGNNFlows.models import get_model
-from HaloEGNNFlows.EGNNFlows.flow_forward import train_step, val_step, flow_forward
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer
-from HaloEGNNFlows.EGNNFlows.datasets import ProgenitorDataset
 from torch.utils.data import DataLoader
 import torch
 import numpy as np
@@ -10,12 +7,15 @@ import os
 import pickle
 import datetime
 
-from HaloEGNNFlows.EGNNFlows.flows.utils import (
+from .EGNNFlows.models import get_model
+from .EGNNFlows.flow_forward import train_step, val_step, flow_forward
+from .EGNNFlows.datasets import ProgenitorDataset
+from .EGNNFlows.utils import subtract_the_boundary
+from .EGNNFlows.flows.utils import (
     assert_mean_zero_with_mask,
     remove_mean_with_mask,
     assert_correctly_masked,
 )
-from HaloEGNNFlows.EGNNFlows.utils import subtract_the_boundary
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
