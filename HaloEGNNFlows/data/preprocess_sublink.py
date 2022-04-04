@@ -6,7 +6,7 @@ from multiprocess import Pool
 import os
 
 # list of features that can be extracted
-subalo_feature_cols = [
+subhalo_feature_cols = [
     "SubhaloBHMass",
     "SubhaloBHMdot",
     "SubhaloBfldDisk",
@@ -216,10 +216,20 @@ def find_most_massive_branch(
 ):
     massive_progID2snapnum = {}
     for s in range(100):
-        most_mass = (f["SubhaloMassType"][np.where(f["SnapNum"][:] == s)[0], :]).sum(-1)
+        snapIdx = np.where(f["SnapNum"][:] == s)[0]
+        most_mass = (f["SubhaloMassType"][snapIdx, :]).sum(-1)
         if len(most_mass) == 0:
             continue
-        idx = np.where(f["SubhaloMassType"][:, :].sum(-1) == most_mass.max())[0]
+        massidx = np.where(f["SubhaloMassType"][:, :].sum(-1) == most_mass.max())[0]
+        idx = np.intersect1d(snapIdx, massidx)
+        try:
+            idx.item()
+        except:
+            print(s, idx, most_mass, most_mass.shape,)
+            most_mass = (f["SubhaloMassType"][np.where(f["SnapNum"][:] == s)[0], :])
+            print(most_mass.shape, most_mass)
+            print(np.where(f['SnapNum'][:] == s))
+            raise ValueError
         massive_progID2snapnum[f["SubhaloID"][idx.item()]] = s
     return massive_progID2snapnum
 
@@ -382,10 +392,11 @@ def extract_progenitors_data(
     colname, subdata = gather_attrs_by_redshifts(filename, redshift_slice, features_)
     col2indx = {c: i for i, c in enumerate(colname)}
 
-    subdata = pad_truncate(subdata, max_progenitors=max_progenitors)
+
 
     sort_col_indx = col2indx[sort_by_feature]  # DM mass
     sorted_data = sort_progenitor_by_columns(subdata, sort_col_indx)
+    sorted_data = pad_truncate(sorted_data, max_progenitors=max_progenitors)
 
     # aggregate edge featyures
     radial_feats = []
@@ -411,9 +422,15 @@ def extract_progenitors_data(
 
     # filter out the vectoral information
 
-    data_inputs = np.hstack((sorted_data, *radial_feats))
-    cols += [f"Radial{r}" for r in radial_features]
 
+
+    # get mass fraction
+    mtype_idx = [col2indx[c] for c in ['SubhaloMassType_0','SubhaloMassType_1','SubhaloMassType_4','SubhaloMassType_5' ]]
+    midx = [col2indx[c] for c in colname if c in ['SubhaloMass']]
+    frac_data = sorted_data[:, mtype_idx] / (sorted_data[:, midx]+1e-10)
+
+    data_inputs = np.hstack((sorted_data, *radial_feats, frac_data))
+    cols += [f"Radial{r}" for r in radial_features] + ['GasFrac', 'DMFrac', 'StarWindFrac', 'BHFrac']
     return np.array(cols), data_inputs
 
 
@@ -454,53 +471,62 @@ def write_prog_by_filename_with_mergez(
     fn,
     output_dir="/content/drive/MyDrive/TNG300/prog_max20",
     max_progenitors=20,
-    feat_names=subalo_feature_cols,
+    feat_names=subhalo_feature_cols,
+    sort_by_feature="SubhaloMass",
     extract_z_slice=range(100),
 ):
-    try:
-        dd = os.path.split(fn)
-        if output_dir is None:
-            output_dir = dd[0]
-        outfile = os.path.join(output_dir, f"prog_{dd[-1].split('.')[0]}.npy")
-        if os.path.exists(outfile):
-            print(f"{outfile} exists")
-            return
+    dd = os.path.split(fn)
+    if output_dir is None:
+        output_dir = dd[0]
+    outfile = os.path.join(output_dir, f"prog_{dd[-1].split('.')[0]}.npy")
+    if os.path.exists(outfile):
+        print(f"{outfile} exists")
+        return
 
-        haloID2indx = None
-        mpb2snapnum = None
-        progs = []
-        # iterate over all redshifts
-        for i in extract_z_slice:
-            colname, prog0 = extract_progenitors_data(
-                fn, i, max_progenitors=max_progenitors, features_to_extract=feat_names
-            )
-            haloID2indx, mpb2snapnum, merge_z, mass = estimate_merging_redshift(
-                fn,
-                i,
-                n_most_massive=max_progenitors,
-                haloID2indx=haloID2indx,
-                mpb2snapnum=mpb2snapnum,
-            )
-            prog0 = np.hstack((prog0, merge_z[:, np.newaxis]))
-            progs.append(prog0.transpose().flatten())
+    haloID2indx = None
+    mpb2snapnum = None
+    progs = []
+    # iterate over all redshifts
+    for i in extract_z_slice:
+        colname, prog0 = extract_progenitors_data(
+            fn, i, max_progenitors=max_progenitors, features_to_extract=feat_names,sort_by_feature=sort_by_feature
+        )
+        haloID2indx, mpb2snapnum, merge_z, mass = estimate_merging_redshift(
+            fn,
+            i,
+            n_most_massive=max_progenitors,
+            haloID2indx=haloID2indx,
+            mpb2snapnum=mpb2snapnum,
+        )
+        prog0 = np.hstack((prog0, merge_z[:, np.newaxis]))
+        progs.append(prog0.transpose().flatten())
 
-        output_arr = np.array(progs)
-        np.save(outfile, output_arr)
+    output_arr = np.array(progs)
+    np.save(outfile, output_arr)
 
-        print(outfile)
-        return outfile
-    except Exception as e:
-        print(fn, "failed")
-        print(e)
-        return fn
+    #print(outfile)
+    return outfile
+    #except Exception as e:
+    #    print(fn, "failed")
+    #    print(e)
+    #    return fn
+
+def get_colname(fn, feat_names, max_progenitors=20, i = 0):
+    colname, prog0 = extract_progenitors_data(
+        fn, i, max_progenitors=max_progenitors, features_to_extract=feat_names
+    )
+    colname  = list(colname)
+    colname += ["SubhaloMergeRedshift"]
+    return colname
 
 
 if __name__ == "__main__":
-    preprocessed_loc = "/scratch/dg97/kt9438/TNG300_preprocessed_data"
+    preprocessed_loc = "/scratch/y89/kt9438/TNG300_preprocessed_data"
+    sublink_loc = "/scratch/y89/kt9438/QueryTNGData/"
+
     existing_npy = glob.glob(f"{preprocessed_loc}/*.npy")
     existing_hid = [f.split("/")[-1].split(".")[0][13:] for f in existing_npy]
 
-    sublink_loc = "/scratch/dg97/kt9438/QueryTNGData/"
     filelist = glob.glob(f"{sublink_loc}/*.hdf5")
     all_hid = [f.split("/")[-1].split(".")[0][8:] for f in filelist]
 
@@ -509,20 +535,26 @@ if __name__ == "__main__":
         f"{sublink_loc}/sublink_{h}.hdf5" for h in remaining_hid
     ]
 
+    np.save("remaning_files.npy", np.array(remaining_filenames))
+
+    column_name = get_colname(remaining_filenames[0], subhalo_feature_cols)
+    np.save("subhalo_columns.npy", column_name)
+
     # identify the location of the slices
     initial_slice = find_closest_redshift_slice(2.0)
     final_slice = find_closest_redshift_slice(0.0)
-    print( len(remaining_filenames))
-    
+    print(len(remaining_filenames))
+
     # Pool the data preprocessing
-    pool = Pool(4)
+    pool = Pool()
     pool.map(
         lambda fn: write_prog_by_filename_with_mergez(
             fn,
             output_dir=preprocessed_loc,
             extract_z_slice=[initial_slice, final_slice],
-            feat_names=subalo_feature_cols,
-            max_progenitors=30,
+            feat_names=subhalo_feature_cols,
+            sort_by_feature="SubhaloMass",
+            max_progenitors=20,
         ),
         remaining_filenames,
     )
