@@ -95,7 +95,7 @@ def compute_metric_features(
     for bsz in range(len(xpos)):
         idx1, idx2 = np.triu_indices(max_prog, 1)
         relvec = (xpos[bsz, idx1, :] - xpos[bsz, idx2, :]).abs()
-        relvec[relvec > box_size / 2] = (relvec[relvec > box_size / 2] - box_size).abs()
+        relvec[relvec > (box_size / 2)] = (relvec[relvec > (box_size / 2)] - box_size).abs()
 
         all_dist.append((relvec**2).sum(-1).numpy())
         # print((dist**2).sum(-1).shape)
@@ -104,7 +104,6 @@ def compute_metric_features(
 
     bsz = len(xpos)
     all_mass = m[:, :max_prog].transpose(2,1).reshape(len(xpos), -1).numpy()
-    print(all_mass.shape, m.shape)
 
     dij = np.triu_indices(max_prog, 1)
     if column_names is None:
@@ -132,7 +131,6 @@ def get_dataloader_features(dl, max_progenitors=20, distance_norm=300, column_na
     for input_graph, input_cond in dl:
         data_mass = input_graph[1]
         data_xpos = input_graph[0]
-        print(data_xpos[0])
         feats, col_names = compute_metric_features(
             data_xpos / distance_norm,
             data_mass,
@@ -176,8 +174,6 @@ def obtain_feature_df(
         final_slice=final_slice,
         data_columns=full_columns_names,
     )
-    print("sample position", dataset[0][0][0])
-    print("sample feature", dataset[0][0][1])
     dl = torch.utils.data.DataLoader(dataset, batch_size=64, num_workers=2)
 
     # iterate it once to obtain the full, sorted "conditional" values
@@ -188,8 +184,6 @@ def obtain_feature_df(
     df_full_cond = pd.DataFrame(sample_condition.numpy(), columns=condition_columns)
 
     all_feats_np, cname = get_dataloader_features(dl, feat_max_progenitors, distance_norm, feature_columns)
-    print(all_feats_np.shape)
-    print(len(cname))
 
     df1 = pd.DataFrame(all_feats_np, columns=cname)
     df1.replace([np.inf, -np.inf], np.nan, inplace=True)
