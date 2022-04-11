@@ -6,20 +6,20 @@ import glob
 import os
 import pickle
 import datetime
+import random
+import argparse
 
 from .EGNNFlows.models import get_model
-from .EGNNFlows.flow_forward import train_step, val_step, flow_forward
 from .EGNNFlows.datasets import ProgenitorDataset
-from .EGNNFlows.utils import subtract_the_boundary
 from .EGNNFlows.flows.utils import (
     assert_mean_zero_with_mask,
     remove_mean_with_mask,
     assert_correctly_masked,
 )
-from HaloEGNNFlows.EGNNFlows.utils import subtract_the_boundary
+from .EGNNFlows.train import train_step, val_step
+from .EGNNFlows.utils import subtract_the_boundary
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
-import torch.multiprocessing as mp
 import torch.distributed as dist
 from tqdm import tqdm
 from collections import OrderedDict
@@ -35,7 +35,7 @@ def prepare_dataloaders(
     initial_slice=0,
     final_slice=1,
     batch_size=32,
-    num_workers=4,
+    num_workers=0,
     random_seed=42,
     train_test_split=[0.8, 0.1, 0.1],
     shuffle_train=False,
@@ -84,7 +84,11 @@ def prepare_dataloaders(
         )
     else:
         sampler = DistributedSampler(
-            train_ds, num_replicas=world_size, rank=rank, shuffle=False, drop_last=True
+            train_ds,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=shuffle_train,
+            drop_last=True,
         )
         dl_train = DataLoader(
             train_ds,
@@ -181,9 +185,6 @@ def prepare_filelist_and_transformer(
         condition_normalizer = pickle.load(open(transformer_pkl, "rb"))
 
     return valid_files, condition_normalizer
-
-
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 def checkpoint_model(
@@ -335,141 +336,6 @@ def filter_filelist(filelist, ncolumns, min_counts=2):
     return gt1
 
 
-def resume_training(ckpt_path):
-    # location when the TNG300 preprocessed data is
-    preprocessed_loc = "/scratch/y89/kt9438/TNG300_preprocessed_data"
-    # Prepare file list
-    filelist = sorted(glob.glob(f"{preprocessed_loc}/prog_sublink_*.npy"))
-    # Prepare the columns names
-    full_columns_names = np.load(f"{preprocessed_loc}/subhalo_columns.npy")
-
-    # The "scalar" feature bounded to the progenitors
-    feature_columns = ["SubhaloMass", "SubhaloMergeRedshift"]
-    # The "positional" feature bounded to the progenitors
-    position_columns = ["SubhaloPos_0", "SubhaloPos_1", "SubhaloPos_2"]
-
-    # initialize the list condtional columns at redshift 0
-    condition_columns = [
-        "SubhaloBHMass",
-        "SubhaloBHMdot",
-        "SubhaloGasMetallicity",
-        "SubhaloStarMetallicity",
-        "SubhaloMass",
-        "SubhaloSFR",
-        "SubhaloVmax",
-        "SubhaloVelDisp",
-    ]
-
-    n_dims = len(position_columns)
-    in_node_nf = len(feature_columns)
-    context_node_nf = len(condition_columns)
-
-    filelist_npy = None if not os.path.exists("valid_files.npy") else "valid_files.npy"
-    transformer_pkl = (
-        None
-        if not os.path.exists("condition_normalizer.pkl")
-        else "condition_normalizer.pkl"
-    )
-
-    valid_files, condition_normalizer = prepare_filelist_and_transformer(
-        filelist_npy=filelist_npy,
-        transformer_pkl=transformer_pkl,
-        filelist=filelist,
-        condition_columns=condition_columns,
-        full_columns_names=full_columns_names,
-        max_progenitors=20,
-        initial_slice=0,
-        final_slice=1,
-        batch_size=512,
-        num_workers=0,
-    )
-
-    # Prepare dataloaders
-    dl_train, dl_val, dl_test = prepare_dataloaders(
-        valid_files,
-        condition_columns,
-        full_columns_names,
-        max_progenitors=20,
-        initial_slice=0,
-        final_slice=1,
-        batch_size=128,
-        num_workers=14,
-        random_seed=42,
-        train_test_split=[0.8, 0.1, 0.1],
-        shuffle_train=True,
-        distributed=False,
-    )
-
-    zidx = None
-    if "SubhaloMergeRedshift" in feature_columns:
-        zidx = feature_columns.index("SubhaloMergeRedshift")
-        print(zidx, "feature with this index would be transform to 1/(1+z)")
-
-    # Load the checkpoint path
-    ckpt = torch.load(ckpt_path)
-
-    # TODO: hyperparameters should also be stored in the ckpt
-    # INITIALIZE the model
-    # Prepare Models and Priors/ Optimizer/ LR scheduler
-    prior, flow = get_model(
-        in_node_nf=in_node_nf,  # Number of Features to fit (i.e. Progenitor Halo Mass)
-        dynamics_in_node_nf=1,  # Use Time as additional Feature
-        context_node_nf=context_node_nf,  # Number of Conditional Features
-        n_dims=n_dims,  # Number of "Equivariant" Dimension
-    )
-    optim = torch.optim.AdamW(flow.parameters(), lr=1e-3)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optim, verbose=1, mode="min", min_lr=1e-8, patience=3
-    )
-    ode_regularization = 0.01
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    # Load state dict from last epoch
-    current_epoch = ckpt["epoch"]
-    flow.load_state_dict(ckpt["model_state_dict"])
-    optim.load_state_dict(ckpt["optimizer_state_dict"])
-    scheduler.load_state_dict(ckpt["scheduler_state_dict"])
-    # train_history
-    train_loss = ckpt["loss"]
-    val_loss = ckpt["val_loss"]
-    max_epochs = len(train_loss)
-
-    dirname = os.path.dirname(ckpt_path)
-    condition_normalizer = pickle.load(open(os.path.join(dirname, "scaler.pkl"), "rb"))
-    log_path = create_log_directory("log_dir")
-
-    for i in range(current_epoch, max_epochs):
-        loss = train_step(
-            flow,
-            prior,
-            optim,
-            dl_train,
-            condition_normalizer,
-            device=device,
-            ode_regularization=ode_regularization,
-            transform_input=transform_z_to_scale(zidx),
-        )
-        val = val_step(
-            flow,
-            prior,
-            dl_val,
-            condition_normalizer,
-            device=device,
-            ode_regularization=ode_regularization,
-            transform_input=transform_z_to_scale(zidx),
-        )
-
-        print(f"Epoch {i}: train loss = {loss:.2f}; val loss = {val:.2f}")
-        train_loss[i] = loss
-        val_loss[i] = val
-        scheduler.step(val)
-        checkpoint_model(
-            flow, scheduler, optim, train_loss, val_loss, epoch=i, log_path=log_path
-        )
-
-
-import random
-
 # https://datascience.stackexchange.com/questions/66345/why-ml-model-produces-different-results-despite-random-state-defined-and-how-to
 def seed_everything(seed=42):
     """ "
@@ -544,10 +410,18 @@ def train_loop(
         context_node_nf=context_node_nf,  # Number of Conditional Features
         n_dims=n_dims,  # Number of "Equivariant" Dimension
     )
-    device = torch.device(f"cuda:0")
+    device = "cuda:0"
     flow = flow.to(device)
-
-    optim = torch.optim.AdamW(flow.parameters(), lr=lr)
+    #optim = torch.optim.Adam(
+    #    flow.parameters(),
+    #    lr=lr,
+    #)
+    optim = torch.optim.AdamW(
+        flow.parameters(),
+        lr=lr,
+#        amsgrad=True,
+#        weight_decay=1e-12
+    )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optim, verbose=1, mode="min", min_lr=1e-8, patience=patience
     )
@@ -617,7 +491,6 @@ def train_loop(
         )
         print(f"Epoch {i}: train loss = {loss.item():.2f}; val loss = {val.item():.2f}")
         scheduler.step(val)
-
 
 
 # https://github.com/olehb/pytorch_ddp_tutorial/blob/main/ddp_tutorial_multi_gpu.py
@@ -693,32 +566,40 @@ def train_parallel(
         device_ids=[rank],
         # output_device=rank,
     )
-    optim = torch.optim.Adam(flow.parameters(), lr=lr)
+    #optim = torch.optim.Adam(
+    #    flow.parameters(),
+    #    lr=lr,
+    #)
+    optim = torch.optim.AdamW(
+        flow.parameters(),
+        lr=lr,
+#        amsgrad=True,
+#        weight_decay=1e-12
+    )
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optim, verbose=1, mode="min", min_lr=1e-8, patience=patience
     )
 
     # initialize model on rank0
-#    actnorm = flow.module.transformations[0]
-#    input_graph, input_cond =next(iter(dl_train))
-#    if rank == 0:
-#        flow_forward(flow, prior, input_graph, input_cond, device=device,)
+    #    actnorm = flow.module.transformations[0]
+    #    input_graph, input_cond =next(iter(dl_train))
+    #    if rank == 0:
+    #        flow_forward(flow, prior, input_graph, input_cond, device=device,)
 
     # copy the parameters in actonorm on rank0 to the rest replicas
-#    dist.broadcast(actnorm.h_t.data, src=0, group=dist.new_group(list(range(world_size))))
-#    dist.broadcast(actnorm.x_log_s.data, src=0, group=dist.new_group(list(range(world_size))))
-#    dist.broadcast(actnorm.h_log_s.data, src=0, group=dist.new_group(list(range(world_size))))
-#    dist.broadcast(actnorm.initialized.data, src=0, group=dist.new_group(list(range(world_size))))
+    #    dist.broadcast(actnorm.h_t.data, src=0, group=dist.new_group(list(range(world_size))))
+    #    dist.broadcast(actnorm.x_log_s.data, src=0, group=dist.new_group(list(range(world_size))))
+    #    dist.broadcast(actnorm.h_log_s.data, src=0, group=dist.new_group(list(range(world_size))))
+    #    dist.broadcast(actnorm.initialized.data, src=0, group=dist.new_group(list(range(world_size))))
     # assert that all other rank shows the same copy
-#    print(actnorm.initialized.data, device)
-#    print(actnorm.h_t.data, device)
-#    print(actnorm.x_log_s.data, device)
-#    print(actnorm.h_log_s.data, device)
+    #    print(actnorm.initialized.data, device)
+    #    print(actnorm.h_t.data, device)
+    #    print(actnorm.x_log_s.data, device)
+    #    print(actnorm.h_log_s.data, device)
 
-#    input_graph, input_cond =next(iter(dl_train))
-#    out = flow_forward(flow, prior, input_graph, input_cond, device=device,)
-#    print(out, device)
-    # restart_path = "log_dir/36795639.gadi-pbs/egnn_0_val=79.959.pt"
+    #    input_graph, input_cond =next(iter(dl_train))
+    #    out = flow_forward(flow, prior, input_graph, input_cond, device=device,)
+    #    print(out, device)
     if restart_path is not None:
         map_location = {"cuda:0": f"cuda:{rank}"}
         ckpt_loc = restart_path
@@ -726,17 +607,11 @@ def train_parallel(
         print(rank, map_location, ckpt_loc)
         # adding prefix to all the parameters in a state_dict
         state_dict = OrderedDict()
-        for k, v in ckpt['model_state_dict'].items():
+        for k, v in ckpt["model_state_dict"].items():
             state_dict[f"module.{k}"] = v
-        print(flow.load_state_dict(
-            state_dict,strict=True
-        ))
-        optim.load_state_dict(
-            ckpt["optimizer_state_dict"]
-        )
-        scheduler.load_state_dict(
-            ckpt["scheduler_state_dict"]
-        )
+        print(flow.load_state_dict(state_dict, strict=True))
+        optim.load_state_dict(ckpt["optimizer_state_dict"])
+        scheduler.load_state_dict(ckpt["scheduler_state_dict"])
         current_epoch = ckpt["epoch"]
         train_loss = ckpt["loss"]
         val_loss = ckpt["val_loss"]
@@ -746,11 +621,9 @@ def train_parallel(
         val_loss = np.zeros(max_epochs)
         current_epoch = 0
 
-
     zidx = None
     # if "SubhaloMergeRedshift" in feature_columns:
     #    zidx = feature_columns.index("SubhaloMergeRedshift")
-
 
     if rank == 0:
         if restart_path is None:
@@ -801,23 +674,6 @@ def train_parallel(
         dist.broadcast(val, src=0, group=dist.new_group(list(range(world_size))))
         scheduler.step(val)
 
-        continue
-        # TODO fixed this load state dict part?
-        # Make sure all copies over GPU begins with the same params
-        # configure map_location properly
-        map_location = {"cuda:0": f"cuda:{rank}"}
-        ckpt_loc = f"{log_path}/egnn_{i}_val={val.item():.3f}.pt"
-        print(rank, map_location, ckpt_loc)
-        flow.load_state_dict(
-            torch.load(ckpt_loc, map_location=map_location)["model_state_dict"]
-        )
-        optim.load_state_dict(
-            torch.load(ckpt_loc, map_location=map_location)["optimizer_state_dict"]
-        )
-        print(rank, map_location, ckpt_loc)
-        dist.barrier()
-        print("after bariier?????")
-
     cleanup()
 
 
@@ -850,7 +706,7 @@ def init_process(
     ],
     full_columns_names=[],
     batch_size=256,
-    lr = 1e-3,
+    lr=1e-3,
     restart_path=None,
     backend="nccl",
 ):
@@ -876,15 +732,6 @@ def init_process(
     )
 
 
-
-# if __name__ == "__main__":
-#    # ckpt_path = "log_dir/36425451.gadi-pbs/egnn_20_val=56.227.pt"
-#    ckpt_path = "log_dir/36587008.gadi-pbs/egnn_32_val=49.370.pt"
-#    resume_training(ckpt_path)
-
-
-import argparse
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -893,7 +740,7 @@ if __name__ == "__main__":
         "--data_location",
         help="the directory where the data is located",
         type=str,
-        default="/scratch/y89/kt9438/TNG300_preprocessed_data/newdata",
+        default="/scratch/y89/kt9438/TNG300_preprocessed_data",
     )
 
     parser.add_argument("-lr", help="learning rate", type=float, default=1e-3)
@@ -963,9 +810,10 @@ if __name__ == "__main__":
         initial_slice=0,
         final_slice=1,
         batch_size=512,
-        num_workers=0,
+        num_workers=56,
         transform_type=args.normalize,
     )
+    print(len(valid_files))
 
     train_loop(
         valid_files,
@@ -984,149 +832,3 @@ if __name__ == "__main__":
         lr=args.lr,
         patience=args.patience,
     )
-
-"""
-
-if __name__ == "__main__":
-
-    # location when the TNG300 preprocessed data is
-    preprocessed_loc = "/scratch/y89/kt9438/TNG300_preprocessed_data"
-    # Prepare file list
-    filelist = sorted(glob.glob(f"{preprocessed_loc}/prog_sublink_*.npy"))
-    # Prepare the columns names
-    full_columns_names = np.load(f"{preprocessed_loc}/subhalo_columns.npy")
-
-    # The "scalar" feature bounded to the progenitors
-    feature_columns = ["SubhaloMass", "SubhaloMergeRedshift"]
-    # The "positional" feature bounded to the progenitors
-    position_columns = ["SubhaloPos_0", "SubhaloPos_1", "SubhaloPos_2"]
-
-    # initialize the list condtional columns at redshift 0
-    condition_columns = [
-        "SubhaloBHMass",
-        "SubhaloBHMdot",
-        "SubhaloGasMetallicity",
-        "SubhaloStarMetallicity",
-        "SubhaloMass",
-        "SubhaloSFR",
-        "SubhaloVmax",
-        "SubhaloVelDisp",
-    ]
-
-    n_dims = len(position_columns)
-    in_node_nf = len(feature_columns)
-    context_node_nf = len(condition_columns)
-    min_prog = 2
-
-    #print(len(filelist))
-    #filelist = filter_filelist(filelist, len(full_columns_names), min_prog)
-    print(len(filelist))
-
-    failed_files = validate_datasets(
-        filelist,
-        condition_columns,
-        full_columns_names,
-        max_progenitors=20,
-        initial_slice=0,
-        final_slice=1,
-        batch_size=256,
-        num_workers=14,
-    )
-
-    valid_files = sorted(list( set(filelist) -set(failed_files) ))
-    print(len(valid_files))
-
-    # Prepare dataloaders
-    dl_train, dl_val, dl_test = prepare_dataloaders(
-        valid_files,
-        condition_columns,
-        full_columns_names,
-        max_progenitors=20,
-        initial_slice=0,
-        final_slice=1,
-        batch_size=128,
-        num_workers=14,
-        random_seed=42,
-        train_test_split=[0.8, 0.1, 0.1],
-        shuffle_train=False
-    )
-
-    input_graph, input_cond = next(iter(dl_train))
-    print([input_graph[i].shape for i in range(4)])
-    print(input_cond[0].shape)
-
-    # Prepare Models and Priors/ Optimizer/ LR scheduler
-    prior, flow = get_model(
-        in_node_nf=in_node_nf,  # Number of Features to fit (i.e. Progenitor Halo Mass)
-        dynamics_in_node_nf=1,  # Use Time as additional Feature
-        context_node_nf=context_node_nf,  # Number of Conditional Features
-        n_dims=n_dims,  # Number of "Equivariant" Dimension
-    )
-    #nll, loss, _, _ = flow_forward(flow, prior, input_graph, input_cond, device='cuda',)
-    #flow = torch.nn.parallel.DistributedDataParallel(flow)
-
-    optim = torch.optim.AdamW(flow.parameters(), lr=1e-3)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optim, verbose=1, mode="min", min_lr=1e-8
-    )
-    print('model is ready')
-
-    max_epochs = 100
-    ode_regularization = 0.1
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print('torch said cuda is available')
-
-    # normalize the input condition
-    sample_condition, condition_normalizer = obtain_condition_transformer(
-        dl_train,
-        max_samples=10000
-    )
-
-    zidx = None
-    if "SubhaloMergeRedshift" in feature_columns:
-        zidx = feature_columns.index("SubhaloMergeRedshift")
-        print(zidx, "feature with this index would be transform to 1/(1+z)")
-
-    train_loss = np.zeros(max_epochs)
-    val_loss = np.zeros(max_epochs)
-
-    log_path = create_log_directory('log_dir')
-    # dump seralized condtion_normalizer
-
-    pickle.dump(condition_normalizer, open(f"{log_path}/scaler.pkl", 'wb'))
-
-    for i in range(max_epochs):
-        loss = train_step(
-            flow,
-            prior,
-            optim,
-            dl_train,
-            condition_normalizer,
-            device=device,
-            ode_regularization=ode_regularization,
-            transform_input= transform_z_to_scale(zidx)
-        )
-        val = val_step(
-            flow,
-            prior,
-            dl_val,
-            condition_normalizer,
-            device=device,
-            ode_regularization=ode_regularization,
-            transform_input= transform_z_to_scale(zidx)
-        )
-
-        train_loss[i] = loss
-        val_loss[i] = val
-        scheduler.step(val)
-        checkpoint_model(
-            flow,
-            scheduler,
-            optim,
-            train_loss,
-            val_loss,
-            epoch=i,
-            log_path=log_path
-        )
-        print(f"Epoch {i}: train loss = {loss:.2f}; val loss = {val:.2f}")
-"""
