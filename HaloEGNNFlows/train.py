@@ -309,6 +309,7 @@ def transform_z_to_scale(z_idx):
             return input_graph
         x, h, node_mask, edge_mask = input_graph
         h[:, :, z_idx] = 1 / (1 + h[:, :, z_idx])
+        h[:, :, z_idx] = (h[:, :, z_idx]).exp()
         return x, h, node_mask, edge_mask
 
     return transform_graph
@@ -376,6 +377,7 @@ def train_loop(
     lr=1e-3,
     random_seed=42,
     patience=3,
+    log_dir="log_dir",
 ):
 
     # initialize random seed across all libs
@@ -446,20 +448,21 @@ def train_loop(
 
     # Apply pre-feature transformation
     zidx = None
-    # if "SubhaloMergeRedshift" in feature_columns:
-    #    zidx = feature_columns.index("SubhaloMergeRedshift")
+    if "SubhaloMergeRedshift" in feature_columns:
+        zidx = feature_columns.index("SubhaloMergeRedshift")
 
     # Initialize log path
     if restart_path is None:
-        log_path = create_log_directory("log_dir")
+        log_path = create_log_directory(log_dir)
         pickle.dump(condition_normalizer, open(f"{log_path}/scaler.pkl", "wb"))
     else:
         log_path = os.path.dirname(restart_path)
 
     # Save the hyperparameters as pickle
     params["log_path"] = log_path
-    with open(os.path.join(log_path, "params.pkl"), "wb") as p:
-        pickle.dump(params, p)
+    if restart_path is None:
+        with open(os.path.join(log_path, "params.pkl"), "wb") as p:
+            pickle.dump(params, p)
 
     # Training Loop
     for i in range(current_epoch, max_epochs):
