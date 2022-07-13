@@ -167,6 +167,7 @@ def prepare_filelist_and_transformer(
 
     return valid_files, condition_normalizer
 
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 def checkpoint_model(
     model,
@@ -177,17 +178,30 @@ def checkpoint_model(
     epoch=0,
     log_path=None,
 ):
-    torch.save(
-        {
-            "epoch": epoch,
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "scheduler_state_dict": scheduler.state_dict(),
-            "loss": train_history,
-            "val_loss": val_history,
-        },
-        f"{log_path}/egnn_{epoch}_val={val_history[epoch]:.3f}.pt",
-    )
+    if isinstance(model, DDP):
+        torch.save(
+            {
+                "epoch": epoch,
+                "model_state_dict": model.module.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "loss": train_history,
+                "val_loss": val_history,
+            },
+            f"{log_path}/egnn_{epoch}_val={val_history[epoch]:.3f}.pt",
+        )
+    else:
+        torch.save(
+            {
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "loss": train_history,
+                "val_loss": val_history,
+            },
+            f"{log_path}/egnn_{epoch}_val={val_history[epoch]:.3f}.pt",
+        )
     print(f"Checkpoint: {log_path}/egnn_{epoch}_val={val_history[epoch]:.3f}.pt")
 
 
