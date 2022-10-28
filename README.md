@@ -14,7 +14,18 @@ pip install -r requirement
 pip install -e .
 ```
 
-## Usage
-```python
-
+## Training the Model
+Model training entry point is under `train/main.py`.
+Sample training can be invoked with
 ```
+python main.py -d TNG300_preprocessed_data -lr 1e-3 -b 128 --max_epochs 1000 --ode_reg 1e-2 --normalize power --log_dir log
+```
+
+## Inferring Progenitor Posterior
+```
+python HaloEGNNFlows/infer_graph.py
+```
+
+## Data
+Sample preprocessed data, checkpoint can be found under https://drive.google.com/drive/folders/1JFB8d9lJWnqRBhAYSppG28PkoQppmR3k?usp=sharing.
+
