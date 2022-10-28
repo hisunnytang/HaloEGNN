@@ -1,0 +1,19 @@
+#!/bin/bash
+#PBS -l ncpus=56
+#PBS -l ngpus=4
+#PBS -l mem=32GB
+#PBS -l jobfs=128GB
+#PBS -l storage=scratch/dg97+scratch/y89
+#PBS -q gpursaa
+#PBS -P dg97
+#PBS -l walltime=48:00:00
+
+#PBS -N reg0.01b256
+
+
+source ~/.bashrc
+cd $PBS_O_WORKDIR
+conda init bash
+conda activate pytorch
+python train_multi.py -lr 1e-3 -b 1238 --max_epochs 1000 --ode_reg 0.01 > $PBS_JOBID.log 
+
